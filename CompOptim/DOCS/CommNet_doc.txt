@@ -1,0 +1,112 @@
+-- CommNet.py -----------------------------------------------------------------------------------
+
+CLASS: CommNet is a class which deals with multiple aspects of distributed models. The class 
+contains methods for -- Defining a communication network,sending vectors throughout the network, 
+and communication scheduling. The fields within the class are as follows:
+	1. topology: A <string> that defines thow ranks are connected.
+	2. data: A <dictionary> of torch tensors that stores the information on each rank.
+	3. recv_data: A <dictionary> of torch tensors that temporarily stores information communicated 
+	with our current rank.
+	4. COMM: Our MPI.COMM_WORLD instance.
+	5. rank: An <integer> that tracks our current rank.
+	6. nprocs: An <integer> that tracks the total number of ranks in our COMM_WORLD instance.
+	7. neighbors: A <list of integers> that tracks our neighboring ranks defined by self.topology.
+
+
+** setup_neighbors():
+-------------------------------------------------------------------------------------------------
+>> This function is used during initialization to set up our instance of the CommNet class.
+   1. Establishes our MPI.COMM_WORLD instance (self.COMM)
+   2. Determines our CPU rank (self.rank)
+   3. Determines the number of processes (self.nprocs)
+   4. Given the topology, it determines the neighbors of our rank. These neighbors are stored as 
+   a list on CPU. Currently this only forms a ring network, but this will ideally be generalizable 
+   in the future. 
+   5. Sets up our received data field (self.recv_data) to accept information from our neighbors. 
+   Note that this simply sets it up as a dictionary of dictionaries to be filled later.
+
+
+-------------------------------------------------------------------------------------------------
+** print_rank():
+-------------------------------------------------------------------------------------------------
+>> Takes no inputs, and prints the current state of our rank in terms of self.data and 
+self.recv_data.
+
+
+-------------------------------------------------------------------------------------------------
+** net_send(neighbor_id,field,name,tag=0,verbose=False):
+-------------------------------------------------------------------------------------------------
+>> net_send() is simply a shell over self.COMM.Send(), and sends the torch tensor found at 
+self.data[field][name] to neighbor_id.
+>> Inputs: 
+	1. neighbor_id: This is the <integer> value of the rank we are communicating with.
+	2. field: This is the name of the sub-<dictionary> within the self.data <dictionary> that we 
+	are sending from.
+	3. name: This is the <torch tensor> within self.data[field], that we are communicating.
+	4. tag: Allows us to set a tag for the communication if we wish.
+	5. verbose: A <boolean> that controls if we print to console upon sending.
+
+
+-------------------------------------------------------------------------------------------------
+** net_recv(neighbor_id,name,tag=0,unique=False,verbose=False):
+-------------------------------------------------------------------------------------------------
+>> net_recv() deals with receiving messages from net_send(). 
+>> Inputs: 
+	1. neighbor_id: This is the <integer> value of the rank we are communicating with.
+	2. name: This is the <torch tensor> within self.recv_data, that we are overwriting.
+	3. tag: Allows us to set a tag for the communication if we wish.
+	4. unique: A <boolean> that controls if we store each neighbor's communication as its own 
+	subdictionary within self.recv_data, or if we overwrite a single tensor to save on memory. 
+		> True -> Each received message is saved in self.recv_data[neighbor_id][name]
+		> False -> Each received message is saved in self.recv_data["rec_field"][name]
+				   and added to the current value of self.recv_data["reduced"][name].
+	5. verbose: A <boolean> that controls if we print to console upon receiving.
+
+
+-------------------------------------------------------------------------------------------------
+** neighbor_gather(field,name,unique=False):
+-------------------------------------------------------------------------------------------------
+>> Performs a local gather operation over the network using net_send and net_recv. For each rank 
+in the network, the funciton takes a torch tensor from each neighbor in self.neighbors, and either 
+adds them all, or saves them all independently depending on the value of [unique]. 
+>> Inputs:
+	1. field: The name of a sub-<dictionary> within self.data that we are communicating to and 
+	receiving from our neighbors.
+	2. name: The specific <torch tensor> within self.data that we are communicating to, and 
+	receiving from each neighbor.
+	3. unique: A <boolean> that controls if we store each neighbor's communication as its own 
+	subdictionary within self.recv_data, or if we overwrite a single tensor to save on memory. 
+		> True -> Each received message is saved in self.recv_data[neighbor_id][name]
+		> False -> Each received message is saved in self.recv_data["rec_field"][name]
+				   and added to the current value of self.recv_data["reduced"][name].
+
+
+-------------------------------------------------------------------------------------------------
+** neighbor_reduce(field,name,unique=False):
+-------------------------------------------------------------------------------------------------
+>> Very similar to neighbor_gather in that we are communicating a <torch tensor> with each 
+neighbor, and receiving one from each neighbor. However, in this instance, these are all added 
+together, and an averaging operation is then done over this sum.
+>> Inputs:
+	1. field: The name of a sub-<dictionary> within self.data that we are communicating to and 
+	receiving from our neighbors.
+	2. name: The specific <torch tensor> within self.data that we are communicating to, and 
+	receiving from each neighbor.
+	3. unique: A <boolean> that controls if we store each neighbor's communication as its own 
+	subdictionary within self.recv_data, or if we overwrite a single tensor to save on memory. 
+		> True -> Each received message is saved in self.recv_data[neighbor_id][name] before being 
+		added together and normalized within self.recv_data["reduced"][name].
+		> False -> Each received message is saved in self.recv_data["rec_field"][name] and added 
+		to the current value of self.recv_data["reduced"][name] before being normalized.
+
+
+-------------------------------------------------------------------------------------------------
+** all_reduce(field,name):
+-------------------------------------------------------------------------------------------------
+>> Performs an all gather and reduce for the data at self.data[field][name] using 
+self.COMM.allgather.
+>> Inputs:
+	1. field: The name of a sub-<dictionary> within self.data that we are communicating to and 
+	receiving from our neighbors.
+	2. name: The specific <torch tensor> within self.data that we are communicating to, and 
+	receiving from each other rank.
