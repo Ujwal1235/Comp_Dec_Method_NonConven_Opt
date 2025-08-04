@@ -3,7 +3,7 @@ import torch
 import torchvision.datasets
 import torchvision.transforms as transforms
 
-def read_datasets(dataset_name, data_dir=None, device='cpu'):
+def read_datasets(dataset_name, data_dir=None):
     if dataset_name in ["CIFAR10", "FashionMNIST", "Shakespeare"]:
         pass
     else:
@@ -49,7 +49,6 @@ def read_datasets(dataset_name, data_dir=None, device='cpu'):
 
     if dataset_name == "Shakespeare":
         # download the tiny shakespeare dataset
-        # input_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')
         input_file_path = os.path.join(data_dir, 'input.txt')
         if not os.path.exists(input_file_path):
             data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'
@@ -83,14 +82,6 @@ def read_datasets(dataset_name, data_dir=None, device='cpu'):
         val_ids = encode(val_data)
 
         # convert to tensors
-        # train_dataset = TensorDataset(torch.tensor(train_ids, dtype=torch.long))
-        # test_dataset = TensorDataset(torch.tensor(val_ids, dtype=torch.long))
-
-        # convert to tensors
-        # train_data = torch.tensor(train_ids[:-1], dtype=torch.long)
-        # train_targets = torch.tensor(train_ids[1:], dtype=torch.long)
-        # test_data = torch.tensor(val_ids[:-1], dtype=torch.long)
-        # test_targets = torch.tensor(val_ids[1:], dtype=torch.long)
         block_size = 128
         train_data = [train_ids[i:i+block_size] for i in range(0, len(train_ids) - block_size, block_size)]
         train_targets = [train_ids[i+1:i+1+block_size] for i in range(0, len(train_ids) - block_size, block_size)]
@@ -99,13 +90,9 @@ def read_datasets(dataset_name, data_dir=None, device='cpu'):
 
         train_data = torch.tensor(train_data, dtype=torch.long)
         train_targets = torch.tensor(train_targets, dtype=torch.long)
-        # train_targets = torch.tensor(train_targets[:train_data.shape[0]], dtype=torch.float)
         test_data = torch.tensor(test_data, dtype=torch.long)
         test_targets = torch.tensor(test_targets, dtype=torch.long)
-        # test_targets = torch.tensor(test_targets[:test_data.shape[0]], dtype=torch.float)
 
-        # print(train_data.shape)
-        # print(train_targets.shape)
         # wrap in TensorDataset
         train_dataset = TensorDataset(train_data, train_targets)
         test_dataset = TensorDataset(test_data, test_targets)

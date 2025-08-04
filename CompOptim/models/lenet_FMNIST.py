@@ -13,6 +13,7 @@ class LeNet5(nn.Module):
         self.fc1 = nn.Linear(256, 120)
         self.fc2 = nn.Linear(120,84)
         self.fc3 = nn.Linear(84,10)
+        self.out_dir = "./results/out-fmnist/"
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

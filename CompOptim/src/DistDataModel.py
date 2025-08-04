@@ -45,12 +45,11 @@ class DistDataModel():
 		self.model = models.__dict__[model]()
 		self.lr_decay = lr_decay
 		self.lr = lr
-		self.resume = resume
+		self.resume = resume 		#if previous checkpoint present to resume training from
 		self.set_optimizer(optimizer,compressor,nvlink=nvlink)
 		self.model = self.model.to(self.device)
 		self.dataset = dataset
 		self.variety = variety
-
 
 		self.nprocs = self.optim.nprocs
 		self.rank = self.optim.rank
@@ -95,8 +94,6 @@ class DistDataModel():
 		# Now we define our loaders based on this.
 		self.train_loader = DL(self.train_dataset, batch_size=self.batch_size, sampler=sampler, drop_last=True)
 		self.test_loader = DL(self.test_dataset, batch_size=1000, shuffle=False)
-		self.train_loader_all = DL(self.train_dataset, batch_size=1000, shuffle=False) #remove that later
-
 
 	'''
 	Sets our optimizer based on an input string.
@@ -119,10 +116,10 @@ class DistDataModel():
 
 			self.optim = get_optimizer(optimizer_name,self.model, compressor, \
 							  comm_set=self.comm_set, device=self.device, topology=self.topology, \
-							  devices=device_list, nvlink=nvlink, lr_decay=self.lr_decay,lr=self.lr)
+							  devices=devices, nvlink=nvlink, lr_decay=self.lr_decay,lr=self.lr)
 			
 			if self.resume == True:
-				ckpt_path = "./results/out-shakespeare-char/chk_Shakespeare-NewAlg-topk50-Rank-4-LR_Decay-cosine-LR-0.0001-Variety-index-BS-128-K-50-10_Epoch_10.pt"
+				ckpt_path = "" # input the checkpoint path to continue the training from
 				checkpoint = torch.load(ckpt_path)
 				self.optim.load_state_dict(checkpoint['optimizer'])
 				self.epoch = checkpoint['iter_num']
@@ -145,7 +142,6 @@ class DistDataModel():
 			verbose = True
 
 		while self.epoch < self.epochs:
-
 			# Increment our epoch and set the model to train.
 			self.epoch += 1
 			self.model.train()
@@ -163,7 +159,7 @@ class DistDataModel():
 			loss = None
 
 			# Perform training for our batches.
-			for batch_index, (data,target) in enumerate(self.train_loader):
+			for _, (data,target) in enumerate(self.train_loader):
 				# Do the standard training stuff.
 				data,target = data.to(self.device), target.to(self.device)
 				self.model.zero_grad()
@@ -179,7 +175,6 @@ class DistDataModel():
 
 			# Set up a barrier at the end of the epoch.
 			self.optim.COMM.Barrier()
-			# dist.barrier()
 		
 			losses = torch.zeros(self.epochs)
 			for k in range(self.epochs):
@@ -187,18 +182,18 @@ class DistDataModel():
 			losses_mean = losses.mean()
 			if losses_mean < self.best_val_loss:
 				self.best_val_loss = losses_mean
-				if self.epoch % 5==0:
+				if self.epoch % 25==0:
 					checkpoint = {
 						'model': self.model.state_dict(),
 						'optimizer': self.optim.state_dict(),
-						'model_args': self.model.model_args,
 						'iter_num': self.epoch,
-						'best_val_loss': self.best_val_loss,
-						'config': self.model.config
+						'best_val_loss': self.best_val_loss
 					}
-					# print(f"saving checkpoint to {self.model.out_dir}")
+					if self.model_name == "nanoGPT":
+						checkpoint.update({'model_args':self.model.model_args, 'config': self.model.config})
 					os.makedirs(self.model.out_dir, exist_ok=True)
 					torch.save(checkpoint, os.path.join(self.model.out_dir, 'chk_'+output_file+'_Epoch_'+str(self.epoch)+'.pt'))
+			print(f"Checkpoints saved at {self.model.out_dir}")
 
 		# If we are tracking, return our out_dict at the end of training.
 		if self.track:

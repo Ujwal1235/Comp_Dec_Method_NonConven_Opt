@@ -71,6 +71,8 @@ class FixupResNet(nn.Module):
                 nn.init.constant_(m.weight, 0)
                 nn.init.constant_(m.bias, 0)
 
+        self.out_dir = "./results/out-cifar/"
+
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1:

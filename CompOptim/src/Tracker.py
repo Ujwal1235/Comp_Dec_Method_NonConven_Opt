@@ -3,8 +3,6 @@ import yaml
 import numpy as np
 import time
 from .CommNet import CommNet
-from .Optimizer import Optimizer
-from mpi4py import MPI
 
 class Tracker(CommNet):
 
@@ -40,7 +38,7 @@ class Tracker(CommNet):
 		start_time = time.time()
 
 		# Loop over the test loader and track our evaluation metrics.
-		for batch_index, (data, target) in enumerate(data_loader):
+		for _, (data, target) in enumerate(data_loader):
 			data, target = data.to(self.device), target.to(self.device)
 			self.model.zero_grad()
 			if self.model_type == "nanoGPT":

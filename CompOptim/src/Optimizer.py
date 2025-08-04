@@ -1,5 +1,3 @@
-from copy import deepcopy
-import torch
 from .CommNet import CommNet
 from .Compressor import *
 
@@ -67,33 +65,21 @@ class Optimizer(CommNet):
 			super().neighbor_reduce(field,name,unique=False)
 
 			self.data[field][name] = self.recv_data["reduced"][name].clone()
-		
-
+	
 	def state_dict(self):
 		state = {
 			'optim_name': self.optim_name,
-			'lr': self.lr,
-			'steps': self.steps,
-			'eps': self.eps,
-			'epoch': self.epoch,
-			'beta1': self.beta1,
-			'data': {}
+			'lr':          self.lr,
+			'steps':       self.steps,
+			'eps':         self.eps,
+			'epoch':       self.epoch,
+			'beta1':       self.beta1,
+			'data':        {
+				field: {name: tensor.detach().cpu()
+						for name, tensor in tensors.items()}
+				for field, tensors in self.data.items()
+			}
 		}
-
-		for field in self.data:
-			state['data'][field] = {}
-			for name, tensor in self.data[field].items():
-				state['data'][field][name] = tensor.detach().cpu()
-
-		if self.optim_name in ["DistributedAdam","DistributedAdaGrad","NewAlg","HeavyBall","CDProxSGT"]:
-			state.update({'beta2': self.beta2})
-		if self.optim_name in ["DistributedAdam","DistributedAdaGrad","NewAlg"]:#,"DoCoM"]:
-			state.update({'gamma': self.gamma})
-		elif self.optim_name in ["HeavyBall","SQuARM-SGD","CDProxSGT","DoCoM"]:
-			state.update({'gamma_g': self.gamma_g, 'gamma_x': self.gamma_x})
-		if self.optim_name in ["NewAlg", "CDProxSGT", "SQuARM-SGD", "HeavyBall"]:
-			state.update({'mu': self.mu})		
-
 		return state
 
 	def load_state_dict(self, state):

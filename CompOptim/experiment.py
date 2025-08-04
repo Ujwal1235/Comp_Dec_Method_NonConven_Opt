@@ -1,9 +1,6 @@
+import argparse
 from src.DistDataModel import DistDataModel
-import os
-import yaml
-from yaml import Loader
 from src.Compressor import *
-from src.DaSHCo import *
 
 compressor_map = {'none': NoneCompressor(),
 				   'topk30': TopKCompressor(0.3),
@@ -13,52 +10,57 @@ compressor_map = {'none': NoneCompressor(),
 				   'qsgd': QSGDCompressor(2)}
 
 
-def convert_to_compress(comm_set):
-	BAR_STRING = "_bar"
-	return list(x+BAR_STRING for x in comm_set)
+def parse_args():
+    p = argparse.ArgumentParser(description="Run a distributed-data experiment")
+    p.add_argument("--dataset",     type=str,   required=True,    choices=["FashionMNIST","CIFAR10","Shakespeare"])
+    p.add_argument("--compress",    type=str,   default="none",   choices=compressor_map)
+    p.add_argument("--optimizer",   type=str,   required=True,    choices=["DADAM","DAMSCo","DaSHCo","CDProxSGD","DAdaGrad"])
+    p.add_argument("--comm-set",    nargs="+",  default=['x'],    help="communication variables")
+    p.add_argument("--lr",          type=float, default=0.001)
+    p.add_argument("--lr-decay",    type=str,   default="none",   choices=["none","cosine"])
+    p.add_argument("--variety",     type=str,   default="index")
+    p.add_argument("--topology",    type=str,   default="ring")
+    p.add_argument("--model",       type=str,   default="LeNet5", choices=["LeNet5","fixup_resnet20","nanoGPT"])
+    p.add_argument("--batch-size",  type=int,   default=8)
+    p.add_argument("--epochs",      type=int,   default=100)
+    p.add_argument("--rank",        type=int,   default=4)
+    p.add_argument("--device",      type=str,   default="cpu")
+    p.add_argument("--resume",      action="store_true")
+    return p.parse_args()
 
-# First we construct our data distributed neural network.
-#GPU optimizations
+def main():
+    args = parse_args()
 
-RANK = 4
-dataset = ["FashionMNIST"]#["FashionMNIST","CIFAR10","Shakespeare"]
-compress_method =["topk30"]
-variety_type = ["index"]
-lr_decay= ["none"]
-optimizers = [("NewAlg",['x'],0.001)]#("NewAlg",['x'],0.001),("DistributedAdaGrad",['x'],0.001),("DistributedAdam",['x'],0.001)]
-topology = ["ring"]
-k_list = [1]
+    # If using top-k, change comm_set to bar-variants
+    if args.compress.startswith("topk"):
+        args.comm_set = [c + "_bar" for c in args.comm_set]
 
-mod = "LeNet5" #"LeNet5"
-bs=8 #8, 64
+    model = DistDataModel(
+        model=args.model,
+        dataset=args.dataset,
+        topology=args.topology,
+        optimizer=args.optimizer,
+        comm_set=args.comm_set,
+        batch_size=args.batch_size,
+        device=args.device,
+        track=True,
+        seed=1337,
+        compressor=compressor_map[args.compress],
+        lr_decay=args.lr_decay,
+        variety=args.variety,
+        learning_rate=args.lr,
+        resume= args.resume
+    )
 
-models=[]
-names = []
-epchs = 150
+    model.epochs = args.epochs * model.k
+    name = (f"{args.dataset}-{args.optimizer}-"
+            f"{args.compress}-Rank-{args.rank}-"
+            f"{args.variety}-lrtype-{args.lr_decay}-"
+            f"{args.epochs}")
 
-
-for data in dataset:
-	for compress in compress_method:
-		for opt,comm_set,lr in optimizers:
-			for lr_type in lr_decay:
-				for variety in variety_type:
-					for k in k_list:
-					#when we compress using the new algorithms, we want to communicate these new terms
-						if "topk" in compress:
-							comm_set = ['x_bar']#convert_to_compress(comm_set)
-
-						models.append(DistDataModel(model=mod,dataset=data,topology="ring",optimizer=opt,\
-						comm_set=comm_set,batch_size=bs,device="cpu",track=True,seed=1337,\
-						compressor=compressor_map[compress],lr_decay=lr_type,variety=variety,learning_rate=lr,k=k))
-
-						names.append(data+"-"+opt+"-"+compress+"-Rank-"+str(RANK)+"-"+variety+"-lrtype-"+lr_type+"-K-"+str(k)+"-"+str(epchs))
-
+    print(f"[INFO] {name} -> Initializing model…", flush=True)
+    model.train(verbose=True, output_file=name)
+    print("[INFO] Training finished.", flush=True)
 
 if __name__ == "__main__":
-	for i in range(len(models)):
-		e_model = models[i]
-		e_model.epochs=epchs*e_model.k
-		print(names[i])
-		print("Model initialized.... Now Starting training....",flush=True)
-		training_history = e_model.train(verbose=True,output_file=names[i])
-		print("training finished...",flush=True)
+    main()

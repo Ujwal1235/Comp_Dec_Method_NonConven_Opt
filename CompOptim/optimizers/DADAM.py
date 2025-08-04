@@ -118,3 +118,9 @@ class DADAM(Optimizer):
                 param.grad.copy_(g)
 
                 self.steps += 1
+
+    def state_dict(self):
+        state = super().state_dict()
+        state['beta2'] = self.beta2
+        state['gamma'] = self.gamma
+        return state

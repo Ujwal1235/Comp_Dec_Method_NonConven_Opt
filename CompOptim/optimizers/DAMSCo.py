@@ -79,3 +79,12 @@ class DaSHCo(Optimizer):
                 param.copy_(self.data['x'][name])
                 param.grad.copy_(self.data['g'][name])
                 self.steps += 1
+
+    def state_dict(self):
+        state = super().state_dict()
+        state.update({
+            'beta2':   self.beta2,
+            'gamma': self.gamma,
+            'mu':      self.mu
+        })
+        return state
